@@ -1,52 +1,57 @@
-<?php
-
-require_once __DIR__ . '/../../config/database.php';
-require_once __DIR__ . '/../models/Taller.php';
-require_once __DIR__ . '/../models/Solicitud.php';
-
-class TallerController
+public function solicitar()
 {
-    private $tallerModel;
-    private $solicitudModel;
-
-    public function __construct()
-    {
-        $database = new Database();
-        $db = $database->connect();
-        $this->tallerModel = new Taller($db);
-        $this->solicitudModel = new Solicitud($db);
+    if (!isset($_SESSION['id'])) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'Debes iniciar sesión'
+        ]);
+        return;
     }
 
-    public function index()
-    {
-        if (!isset($_SESSION['id'])) {
-            header('Location: index.php?page=login');
-            return;
-        }
-        require __DIR__ . '/../views/taller/listado.php';
-    }
-    
-    public function getTalleresJson()
-    {
-        if (!isset($_SESSION['id'])) {
-            echo json_encode([]);
-            return;
-        }
-        
-        $talleres = $this->tallerModel->getAllDisponibles();
-        header('Content-Type: application/json');
-        echo json_encode($talleres);
-    }
-    
-    public function solicitar()
-    {
-        if (!isset($_SESSION['id'])) {
-            echo json_encode(['success' => false, 'error' => 'Debes iniciar sesión']);
-            return;
-        }
-        
-        $tallerId = $_POST['taller_id'] ?? 0;
-        $usuarioId = $_SESSION['id'];
+    $tallerId = $_POST['taller_id'] ?? 0;
+    $usuarioId = $_SESSION['id'];
 
+    // 🔴 Validar que venga el ID
+    if ($tallerId == 0) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'Taller inválido'
+        ]);
+        return;
+    }
+
+    // 🔴 1. Validar duplicado
+    if ($this->solicitudModel->existeSolicitud($usuarioId, $tallerId)) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'Ya solicitaste este taller'
+        ]);
+        return;
+    }
+
+    // 🔴 2. Validar cupo disponible
+    $taller = $this->tallerModel->getById($tallerId);
+
+    if (!$taller || $taller['cupo_disponible'] <= 0) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'No hay cupo disponible'
+        ]);
+        return;
+    }
+
+    // 🔴 3. Insertar solicitud
+    $resultado = $this->solicitudModel->crear($tallerId, $usuarioId);
+
+    if ($resultado) {
+        echo json_encode([
+            'success' => true,
+            'message' => 'Solicitud enviada correctamente'
+        ]);
+    } else {
+        echo json_encode([
+            'success' => false,
+            'error' => 'Error al registrar solicitud'
+        ]);
     }
 }
